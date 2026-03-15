@@ -1,13 +1,16 @@
-﻿using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+﻿using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore;
+using ProjectPBF.Models;
 
-namespace ProjectPBF.Data
+namespace ProjectPBF.Data;
+
+public class ApplicationDbContext : IdentityDbContext<UserModel, IdentityRole<int>, int>
 {
-    public class ApplicationDbContext : IdentityDbContext
+    public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+        : base(options)
     {
-        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
-            : base(options)
-        {
-        }
     }
+    public DbSet<CharacterModel> CharacterModels { get; set; }
+
 }
