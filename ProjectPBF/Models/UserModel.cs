@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Identity;
+using ProjektPBF.Models;
 
 namespace ProjectPBF.Models
 {
@@ -6,5 +7,7 @@ namespace ProjectPBF.Models
     {
         public string Nick { get; set; }
         public string? AvatarUrl { get; set; }
+
+        public UserRole Role { get; set; } = UserRole.Player;
     }
 }
