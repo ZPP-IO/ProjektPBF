@@ -10,164 +10,172 @@ using Microsoft.AspNetCore.Authorization;
 using ProjectPBF.Data;
 using ProjectPBF.Models;
 
-
 namespace ProjectPBF.Controllers
 {
-    namespace ProjectPBF.Controllers
+    [Authorize]
+    public class CharacterModelsController : Controller
     {
-        [Authorize]
-        public class CharacterModelsController : Controller
+        private readonly ApplicationDbContext _context;
+        private readonly UserManager<UserModel> _userManager;
+
+        public CharacterModelsController(ApplicationDbContext context, UserManager<UserModel> userManager)
         {
-            private readonly ApplicationDbContext _context;
-            private readonly UserManager<UserModel> _userManager;
+            _context = context;
+            _userManager = userManager;
+        }
 
-            public CharacterModelsController(ApplicationDbContext context, UserManager<UserModel> userManager)
+        public async Task<IActionResult> Index()
+        {
+            var userId = int.Parse(_userManager.GetUserId(User));
+            var myCharacters = _context.CharacterModels
+                .Include(c => c.User)
+                .Where(c => c.UserId == userId);
+
+            return View(await myCharacters.ToListAsync());
+        }
+
+        public async Task<IActionResult> Details(int? id)
+        {
+            if (id == null)
             {
-                _context = context;
-                _userManager = userManager;
+                return NotFound();
             }
 
-            public async Task<IActionResult> Index()
+            var characterModel = await _context.CharacterModels
+                .Include(c => c.User)
+                .FirstOrDefaultAsync(m => m.Id == id);
+            if (characterModel == null)
             {
-                var userId = int.Parse(_userManager.GetUserId(User));
-                var myCharacters = _context.CharacterModels
-                    .Include(c => c.User)
-                    .Where(c => c.UserId == userId);
-
-                return View(await myCharacters.ToListAsync());
+                return NotFound();
             }
 
-            public async Task<IActionResult> Details(int? id)
+            return View(characterModel);
+        }
+
+        public IActionResult Create()
+        {
+            return View();
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        public async Task<IActionResult> Create([Bind("Name,Description,Strength,Agility,Intelligence,AvatarUrl")] CharacterModel characterModel)
+        {
+            var userIdString = _userManager.GetUserId(User);
+            if (string.IsNullOrEmpty(userIdString)) return Challenge();
+
+            characterModel.UserId = int.Parse(userIdString);
+
+            characterModel.IsAccepted = false;
+
+            // sprawdzenie roli MG/Admin: mogą od razu zaakceptować postać
+            var currentUser = await _userManager.GetUserAsync(User);
+            if (await _userManager.IsInRoleAsync(currentUser, "Admin") ||
+                await _userManager.IsInRoleAsync(currentUser, "GameMaster"))
             {
-                if (id == null)
-                {
-                    return NotFound();
-                }
-
-                var characterModel = await _context.CharacterModels
-                    .Include(c => c.User)
-                    .FirstOrDefaultAsync(m => m.Id == id);
-                if (characterModel == null)
-                {
-                    return NotFound();
-                }
-
-                return View(characterModel);
+                characterModel.IsAccepted = true;
             }
 
-            public IActionResult Create()
+            ModelState.Remove("UserId");
+            ModelState.Remove("User");
+
+            if (ModelState.IsValid)
             {
-                return View();
-            }
-
-            [HttpPost]
-            [ValidateAntiForgeryToken]
-            public async Task<IActionResult> Create([Bind("Name,Description,Strength,Agility,Intelligence,AvatarUrl")] CharacterModel characterModel)
-            {
-                var userIdString = _userManager.GetUserId(User);
-                if (string.IsNullOrEmpty(userIdString)) return Challenge();
-
-                characterModel.UserId = int.Parse(userIdString);
-
-                characterModel.IsAccepted = false;
-
-                ModelState.Remove("UserId");
-                ModelState.Remove("User");
-
-                if (ModelState.IsValid)
-                {
-                    _context.Add(characterModel);
-                    await _context.SaveChangesAsync();
-                    return RedirectToAction(nameof(Index));
-                }
-                return View(characterModel);
-            }
-
-            public async Task<IActionResult> Edit(int? id)
-            {
-                if (id == null)
-                {
-                    return NotFound();
-                }
-
-                var characterModel = await _context.CharacterModels.FindAsync(id);
-                if (characterModel == null)
-                {
-                    return NotFound();
-                }
-                ViewData["UserId"] = new SelectList(_context.Users, "Id", "Id", characterModel.UserId);
-                return View(characterModel);
-            }
-
-            [HttpPost]
-            [ValidateAntiForgeryToken]
-            public async Task<IActionResult> Edit(int id, [Bind("Id,Name,Description,Strength,Agility,Intelligence,AvatarUrl,IsAccepted,UserId")] CharacterModel characterModel)
-            {
-                if (id != characterModel.Id)
-                {
-                    return NotFound();
-                }
-
-                if (ModelState.IsValid)
-                {
-                    try
-                    {
-                        _context.Update(characterModel);
-                        await _context.SaveChangesAsync();
-                    }
-                    catch (DbUpdateConcurrencyException)
-                    {
-                        if (!CharacterModelExists(characterModel.Id))
-                        {
-                            return NotFound();
-                        }
-                        else
-                        {
-                            throw;
-                        }
-                    }
-                    return RedirectToAction(nameof(Index));
-                }
-                ViewData["UserId"] = new SelectList(_context.Users, "Id", "Id", characterModel.UserId);
-                return View(characterModel);
-            }
-
-            public async Task<IActionResult> Delete(int? id)
-            {
-                if (id == null)
-                {
-                    return NotFound();
-                }
-
-                var characterModel = await _context.CharacterModels
-                    .Include(c => c.User)
-                    .FirstOrDefaultAsync(m => m.Id == id);
-                if (characterModel == null)
-                {
-                    return NotFound();
-                }
-
-                return View(characterModel);
-            }
-
-            [HttpPost, ActionName("Delete")]
-            [ValidateAntiForgeryToken]
-            public async Task<IActionResult> DeleteConfirmed(int id)
-            {
-                var characterModel = await _context.CharacterModels.FindAsync(id);
-                if (characterModel != null)
-                {
-                    _context.CharacterModels.Remove(characterModel);
-                }
-
+                _context.Add(characterModel);
                 await _context.SaveChangesAsync();
                 return RedirectToAction(nameof(Index));
             }
+            return View(characterModel);
+        }
 
-            private bool CharacterModelExists(int id)
+        [Authorize(Roles = "GameMaster,Admin")]
+        public async Task<IActionResult> Edit(int? id)
+        {
+            if (id == null)
             {
-                return _context.CharacterModels.Any(e => e.Id == id);
+                return NotFound();
             }
+
+            var characterModel = await _context.CharacterModels.FindAsync(id);
+            if (characterModel == null)
+            {
+                return NotFound();
+            }
+            ViewData["UserId"] = new SelectList(_context.Users, "Id", "Id", characterModel.UserId);
+            return View(characterModel);
+        }
+
+        [HttpPost]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "GameMaster,Admin")]
+        public async Task<IActionResult> Edit(int id, [Bind("Id,Name,Description,Strength,Agility,Intelligence,AvatarUrl,IsAccepted,UserId")] CharacterModel characterModel)
+        {
+            if (id != characterModel.Id)
+            {
+                return NotFound();
+            }
+
+            if (ModelState.IsValid)
+            {
+                try
+                {
+                    _context.Update(characterModel);
+                    await _context.SaveChangesAsync();
+                }
+                catch (DbUpdateConcurrencyException)
+                {
+                    if (!CharacterModelExists(characterModel.Id))
+                    {
+                        return NotFound();
+                    }
+                    else
+                    {
+                        throw;
+                    }
+                }
+                return RedirectToAction(nameof(Index));
+            }
+            ViewData["UserId"] = new SelectList(_context.Users, "Id", "Id", characterModel.UserId);
+            return View(characterModel);
+        }
+
+        [Authorize(Roles = "GameMaster,Admin")]
+        public async Task<IActionResult> Delete(int? id)
+        {
+            if (id == null)
+            {
+                return NotFound();
+            }
+
+            var characterModel = await _context.CharacterModels
+                .Include(c => c.User)
+                .FirstOrDefaultAsync(m => m.Id == id);
+            if (characterModel == null)
+            {
+                return NotFound();
+            }
+
+            return View(characterModel);
+        }
+
+        [HttpPost, ActionName("Delete")]
+        [ValidateAntiForgeryToken]
+        [Authorize(Roles = "GameMaster,Admin")]
+        public async Task<IActionResult> DeleteConfirmed(int id)
+        {
+            var characterModel = await _context.CharacterModels.FindAsync(id);
+            if (characterModel != null)
+            {
+                _context.CharacterModels.Remove(characterModel);
+            }
+
+            await _context.SaveChangesAsync();
+            return RedirectToAction(nameof(Index));
+        }
+
+        private bool CharacterModelExists(int id)
+        {
+            return _context.CharacterModels.Any(e => e.Id == id);
         }
     }
 }
